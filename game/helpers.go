@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -69,4 +70,15 @@ func buildStringAboutItemsInRoom(items []*Item) string {
 	}
 
 	return result.String()
+}
+
+// buildResponseForKitchen formats string response for the kitchen Room.
+func buildResponseForKitchen(formatStr, items, exits string) string {
+	var action = kitchenActionNotReady
+	if _, ok := player.ItemsWorn["рюкзак"]; ok {
+		action = kitchenActionReady
+	}
+
+	resp := fmt.Sprintf(formatStr, items, action, exits)
+	return resp
 }

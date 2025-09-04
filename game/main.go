@@ -15,7 +15,6 @@ var (
 
 func main() {
 	initGame()
-
 }
 
 func initGame() {
@@ -33,26 +32,7 @@ func initGame() {
 func setupWorld() {
 	// Setup rooms.
 
-	kitchenItems := []*Item{
-		{
-			Name:          "чай",
-			WhatAppliesTo: map[string]struct{}{},
-			Location:      "на столе",
-		},
-	}
-	kitchenExits := []string{
-		"коридор",
-	}
-	world.Rooms[roomNameKitchen] = &Room{
-		Name:              roomNameKitchen,
-		Description:       roomDescKitchen,
-		LookAroundMessage: roomLookAroundKitchen,
-		Doors:             make(map[string]*Door),
-		Items:             kitchenItems,
-		Exits:             kitchenExits,
-	}
-
-	// Doors
+	// Setup doors.
 	doorBetweenCorridorAndOutside := &Door{
 		IsLocked: true,
 	}
@@ -64,12 +44,32 @@ func setupWorld() {
 		roomNameCorridor: doorBetweenCorridorAndOutside,
 	}
 
-	// Corridor
+	// Kitchen room.
+	kitchenItems := []*Item{
+		{
+			Name:          "чай",
+			WhatAppliesTo: map[string]struct{}{},
+			Location:      "на столе",
+		},
+	}
+	kitchenExits := []string{
+		roomNameCorridor,
+	}
+	world.Rooms[roomNameKitchen] = &Room{
+		Name:              roomNameKitchen,
+		Description:       roomDescKitchen,
+		LookAroundMessage: roomLookAroundKitchen,
+		Doors:             make(map[string]*Door),
+		Items:             kitchenItems,
+		Exits:             kitchenExits,
+	}
+
+	// Corridor room.
 	var corridorItems []*Item
 	corridorExits := []string{
-		"кухня",
-		"комната",
-		"улица",
+		roomNameKitchen,
+		roomNameMyRoom,
+		roomNameOutside,
 	}
 	world.Rooms[roomNameCorridor] = &Room{
 		Name:              roomNameCorridor,
@@ -80,7 +80,7 @@ func setupWorld() {
 		Exits:             corridorExits,
 	}
 
-	// My Room
+	// My Room.
 	myRoomItems := []*Item{
 		{
 			Name: "ключи",
@@ -90,7 +90,7 @@ func setupWorld() {
 			Location:  "на столе",
 			CanBeWorn: false,
 			Apply: func(player *Player) string {
-				door, ok := player.CurrentRoom.Doors["улица"]
+				door, ok := player.CurrentRoom.Doors[roomNameOutside]
 				if !ok {
 					return responseItemCantBeApplied
 				}
@@ -115,13 +115,22 @@ func setupWorld() {
 			Location:      "на стуле",
 			CanBeWorn:     true,
 			Apply: func(player *Player) string {
-				player.InventorySize += 32
-				player.ItemsWorn["рюкзак"] = struct{}{}
-				return "вы надели: рюкзак"
+				_, ok := player.ItemsWorn["рюкзак"]
+				if !ok {
+					player.InventorySize += 32
+					player.ItemsWorn["рюкзак"] = struct{}{}
+
+					return fmt.Sprintf(responseItemIsWorn, "рюкзак")
+				}
+
+				player.InventorySize -= 32
+				delete(player.ItemsWorn, "рюкзак")
+
+				return fmt.Sprintf(responseItemIsRemoved, "рюкзак")
 			},
 		}}
 	myRoomExits := []string{
-		"коридор",
+		roomNameCorridor,
 	}
 	world.Rooms[roomNameMyRoom] = &Room{
 		Name:              roomNameMyRoom,
@@ -132,7 +141,7 @@ func setupWorld() {
 		Exits:             myRoomExits,
 	}
 
-	// Outside
+	// Outside room.
 	var outsideItems []*Item
 	outsideExits := []string{
 		"домой",
@@ -145,12 +154,13 @@ func setupWorld() {
 		Exits:       outsideExits,
 	}
 
+	// Setup actions for each Room in World.
 	for _, room := range world.Rooms {
 		setupRoomActions(room)
 	}
 }
 
-// setupRoomActions setup Actions field (map[string]ActionFunc) dynamically for each room.
+// setupRoomActions setup Actions field (map[string]ActionFunc) dynamically for each Room.
 func setupRoomActions(room *Room) {
 	room.Actions = map[string]ActionFunc{
 		actionLookAround: func(args ...string) string {
@@ -161,17 +171,13 @@ func setupRoomActions(room *Room) {
 			var resp string
 			itemsResp := buildStringAboutItemsInRoom(room.Items)
 
+			// If Player is located in kitchen, should build a dynamic message, depending on Player condition.
 			if room.Name == roomNameKitchen {
-				var action = kitchenActionNotReady
-				if _, ok := player.ItemsWorn["рюкзак"]; ok {
-					action = kitchenActionReady
-				}
-
-				resp = fmt.Sprintf(room.LookAroundMessage, itemsResp, action, strings.Join(room.Exits, ", "))
-				return resp
+				resp = buildResponseForKitchen(room.LookAroundMessage, itemsResp, strings.Join(room.Exits, ", "))
+			} else {
+				resp = fmt.Sprintf(room.LookAroundMessage, itemsResp, strings.Join(room.Exits, ", "))
 			}
 
-			resp = fmt.Sprintf(room.LookAroundMessage, itemsResp, strings.Join(room.Exits, ", "))
 			return resp
 		},
 		actionGo: func(args ...string) string {
@@ -181,7 +187,6 @@ func setupRoomActions(room *Room) {
 
 			roomToGoName := args[1]
 			roomToGo, ok := world.Rooms[roomToGoName]
-
 			// Check if no exit from current room or room does not exist at all.
 			if !slices.Contains(player.CurrentRoom.Exits, roomToGoName) || !ok {
 				resp := fmt.Sprintf(responseNoWayToRoom, roomToGoName)
@@ -270,8 +275,10 @@ func setupRoomActions(room *Room) {
 				}
 			}
 
+			// Item was taken by a Player, so it should be deleted from Room.
 			deleteItemFromRoom(player.CurrentRoom, itemToWear)
 
+			// Apply Item.
 			resp := it.Apply(player)
 			return resp
 		},

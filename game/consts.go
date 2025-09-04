@@ -49,4 +49,7 @@ const (
 
 	responseDoorIsLocked   = "дверь закрыта"
 	responseDoorIsUnLocked = "дверь открыта"
+
+	responseItemIsWorn    = "вы надели: %s"
+	responseItemIsRemoved = "вы сняли: %s"
 )
